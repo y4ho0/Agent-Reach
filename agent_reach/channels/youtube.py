@@ -37,7 +37,7 @@ def _has_js_runtime_config(config_path) -> bool:
             max_bytes=1024 * 1024,
             encoding="utf-8-sig",
         )
-        if payload is None:
+        if payload is None or "--js-runtimes" not in payload:
             return False
         return any("--js-runtimes" in token for token in shlex.split(payload, comments=True))
     except (OSError, UnicodeError, PrivatePathError, ValueError):

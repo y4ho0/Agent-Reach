@@ -73,6 +73,7 @@ def test_has_js_runtime_config_false_when_flag_absent(tmp_path):
     ("--no-js-runtimes\n--js-runtimes node\n", True),
     ('--alias jsr "--js-runtimes node" --jsr\n', True),
     ('--output "video --js-runtimes node.%(ext)s"\n', True),
+    ('--output "--js-""runtimes node"\n', False),
     ("\ufeff--js-runtimes node\n", True),
     ("\ufeff# --js-runtimes node\n", False),
     ("--js-runtimes node\r\n", True),
