@@ -2,6 +2,7 @@
 """YouTube — check if yt-dlp is available with JS runtime."""
 
 import re
+import shlex
 import shutil
 
 from agent_reach.probe import probe_command
@@ -25,14 +26,38 @@ def _parse_ytdlp_version(version: str):
 
 
 def _has_js_runtime_config(config_path) -> bool:
-    """Return whether yt-dlp config explicitly enables a JS runtime."""
+    """Detect explicit runtime declarations, not yt-dlp's full effective config.
+
+    Match its shell-style tokenization so comments and substrings in quoted
+    values do not count as flags. This only interprets runtime options here, not
+    other options' argument counts, included configs, or runtime health.
+    """
     try:
         payload = read_small_text_no_follow(
             config_path,
             max_bytes=1024 * 1024,
+            encoding="utf-8-sig",
         )
-        return payload is not None and "--js-runtimes" in payload
-    except (OSError, UnicodeError, PrivatePathError):
+        if payload is None:
+            return False
+        tokens = iter(shlex.split(payload, comments=True))
+        configured = False
+        for token in tokens:
+            if token == "--":
+                break
+            if token == "--no-js-runtimes":
+                configured = False
+            elif token == "--js-runtimes" or token.startswith("--js-runtimes="):
+                runtime = (
+                    next(tokens, None)
+                    if token == "--js-runtimes"
+                    else token.partition("=")[2]
+                )
+                if runtime is None or runtime.strip().startswith("-"):
+                    return False
+                configured = configured or bool(runtime.strip())
+        return configured
+    except (OSError, UnicodeError, PrivatePathError, ValueError):
         return False
 
 

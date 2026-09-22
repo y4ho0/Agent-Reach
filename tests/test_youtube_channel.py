@@ -14,6 +14,8 @@ reddit (#364), xueqiu (#365) and v2ex (#366).
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+import pytest
+
 from agent_reach.channels import youtube as yt
 from agent_reach.channels.youtube import YouTubeChannel, _has_js_runtime_config
 from agent_reach.probe import ProbeResult
@@ -55,6 +57,36 @@ def test_has_js_runtime_config_false_when_flag_absent(tmp_path):
     cfg = tmp_path / "config"
     cfg.write_text("--no-mtime\n", encoding="utf-8")
     assert _has_js_runtime_config(cfg) is False
+
+
+@pytest.mark.parametrize("payload, expected", [
+    ("# --js-runtimes node\n", False),
+    ("  # --js-runtimes node\n--no-mtime\n", False),
+    ("--no-mtime # --js-runtimes node\n", False),
+    ('--output "video --js-runtimes node.%(ext)s"\n', False),
+    ("--js-runtimes=node\n", True),
+    ("--js-runtimes\nnode\n", True),
+    ('--js-runtimes "node:/tools/Node JS/node"\n', True),
+    ("--js-runtimes node # enabled explicitly\n", True),
+    ("--js-runtimes\n", False),
+    ("--js-runtimes=\n", False),
+    ('--js-runtimes ""\n', False),
+    ('--js-runtimes "node\n', False),
+    ("--js-runtimes node\n--no-js-runtimes\n", False),
+    ("--no-js-runtimes\n--js-runtimes node\n", True),
+    ("--js-runtimes node\n--js-runtimes=\n", True),
+    ("--js-runtimes deno\n--js-runtimes node\n--no-js-runtimes\n", False),
+    ("--js-runtimes --no-js-runtimes\n", False),
+    ("-- --js-runtimes node\n", False),
+    ("\ufeff--js-runtimes node\n", True),
+    ("\ufeff# --js-runtimes node\n", False),
+    ("--js-runtimes node\r\n", True),
+    ("--js-runtimes node\r\n--no-js-runtimes\r\n", False),
+])
+def test_has_js_runtime_config_uses_active_option_tokens(tmp_path, payload, expected):
+    cfg = tmp_path / "config"
+    cfg.write_text(payload, encoding="utf-8")
+    assert _has_js_runtime_config(cfg) is expected
 
 
 def test_has_js_runtime_config_swallows_oserror(tmp_path):
@@ -116,6 +148,25 @@ def test_check_warn_when_node_only_and_config_missing_flag():
          patch.object(yt, "_has_js_runtime_config", return_value=False):
         status, message = ch.check()
     assert status == "warn"
+    assert ch.active_backend == "yt-dlp"
+
+
+@pytest.mark.parametrize("payload", [
+    "# --js-runtimes node\n",
+    '--output "video --js-runtimes node.%(ext)s"\n',
+    "--js-runtimes node\n--no-js-runtimes\n",
+])
+def test_check_warns_when_runtime_is_only_mentioned_or_cleared(tmp_path, payload):
+    cfg = tmp_path / "config"
+    cfg.write_text(payload, encoding="utf-8")
+    ch = YouTubeChannel()
+    with patch.object(yt, "probe_command", return_value=ProbeResult("ok", output="2026.07.04")), \
+         patch("shutil.which", side_effect=_which("node")), \
+         patch.object(yt, "get_ytdlp_config_path", return_value=cfg):
+        status, message = ch.check()
+
+    assert status == "warn"
+    assert "--js-runtimes node" in message
     assert ch.active_backend == "yt-dlp"
 
 
