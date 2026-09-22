@@ -26,11 +26,10 @@ def _parse_ytdlp_version(version: str):
 
 
 def _has_js_runtime_config(config_path) -> bool:
-    """Detect explicit runtime declarations, not yt-dlp's full effective config.
+    """Look for runtime configuration hints outside shell-style comments.
 
-    Match its shell-style tokenization so comments and substrings in quoted
-    values do not count as flags. This only interprets runtime options here, not
-    other options' argument counts, included configs, or runtime health.
+    Keep the existing substring heuristic inside tokens: quoted alias expansions
+    can contain runtime flags too. This is not a full effective-config parser.
     """
     try:
         payload = read_small_text_no_follow(
@@ -40,23 +39,7 @@ def _has_js_runtime_config(config_path) -> bool:
         )
         if payload is None:
             return False
-        tokens = iter(shlex.split(payload, comments=True))
-        configured = False
-        for token in tokens:
-            if token == "--":
-                break
-            if token == "--no-js-runtimes":
-                configured = False
-            elif token == "--js-runtimes" or token.startswith("--js-runtimes="):
-                runtime = (
-                    next(tokens, None)
-                    if token == "--js-runtimes"
-                    else token.partition("=")[2]
-                )
-                if runtime is None or runtime.strip().startswith("-"):
-                    return False
-                configured = configured or bool(runtime.strip())
-        return configured
+        return any("--js-runtimes" in token for token in shlex.split(payload, comments=True))
     except (OSError, UnicodeError, PrivatePathError, ValueError):
         return False
 

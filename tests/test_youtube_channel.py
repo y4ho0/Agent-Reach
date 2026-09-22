@@ -63,27 +63,28 @@ def test_has_js_runtime_config_false_when_flag_absent(tmp_path):
     ("# --js-runtimes node\n", False),
     ("  # --js-runtimes node\n--no-mtime\n", False),
     ("--no-mtime # --js-runtimes node\n", False),
-    ('--output "video --js-runtimes node.%(ext)s"\n', False),
     ("--js-runtimes=node\n", True),
     ("--js-runtimes\nnode\n", True),
     ('--js-runtimes "node:/tools/Node JS/node"\n', True),
     ("--js-runtimes node # enabled explicitly\n", True),
-    ("--js-runtimes\n", False),
-    ("--js-runtimes=\n", False),
-    ('--js-runtimes ""\n', False),
     ('--js-runtimes "node\n', False),
-    ("--js-runtimes node\n--no-js-runtimes\n", False),
+    # Preserve existing heuristics; this fix does not resolve aliases or resets.
+    ("--js-runtimes node\n--no-js-runtimes\n", True),
     ("--no-js-runtimes\n--js-runtimes node\n", True),
-    ("--js-runtimes node\n--js-runtimes=\n", True),
-    ("--js-runtimes deno\n--js-runtimes node\n--no-js-runtimes\n", False),
-    ("--js-runtimes --no-js-runtimes\n", False),
-    ("-- --js-runtimes node\n", False),
+    ('--alias jsr "--js-runtimes node" --jsr\n', True),
+    ('--output "video --js-runtimes node.%(ext)s"\n', True),
     ("\ufeff--js-runtimes node\n", True),
     ("\ufeff# --js-runtimes node\n", False),
     ("--js-runtimes node\r\n", True),
-    ("--js-runtimes node\r\n--no-js-runtimes\r\n", False),
+    ("--js-runtimes node\r\n--no-js-runtimes\r\n", True),
+    # These tokens are values for --output, not runtime-reset/end-of-options flags.
+    ('--js-runtimes node --output "--no-js-runtimes"\n', True),
+    ('--output "--no-js-runtimes" --js-runtimes node\n', True),
+    ('--output "--" --js-runtimes node\n', True),
+    ('--output "--js-runtimes" --js-runtimes node\n', True),
+    ('--js-runtimes "node:/tools/#bin/node" # runtime path contains a hash\n', True),
 ])
-def test_has_js_runtime_config_uses_active_option_tokens(tmp_path, payload, expected):
+def test_has_js_runtime_config_ignores_shell_comments(tmp_path, payload, expected):
     cfg = tmp_path / "config"
     cfg.write_text(payload, encoding="utf-8")
     assert _has_js_runtime_config(cfg) is expected
@@ -153,10 +154,9 @@ def test_check_warn_when_node_only_and_config_missing_flag():
 
 @pytest.mark.parametrize("payload", [
     "# --js-runtimes node\n",
-    '--output "video --js-runtimes node.%(ext)s"\n',
-    "--js-runtimes node\n--no-js-runtimes\n",
+    "--no-mtime # --js-runtimes node\n",
 ])
-def test_check_warns_when_runtime_is_only_mentioned_or_cleared(tmp_path, payload):
+def test_check_warns_when_runtime_is_only_mentioned(tmp_path, payload):
     cfg = tmp_path / "config"
     cfg.write_text(payload, encoding="utf-8")
     ch = YouTubeChannel()
